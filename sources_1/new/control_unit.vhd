@@ -55,8 +55,193 @@ Port (
 end control_unit;
 
 architecture Behavioral of control_unit is
-
+    type fsm_t is (INIT,FETCH1,FETCH2,FETCH3,DECODE,EXECUTE,UPDATE_REG);
+    signal actual_st, next_st: fsm_t;
+    
 begin
 
-
+    process(clk,rst)
+    begin
+        if rst = '1' then actual_st <= INIT;
+        elsif rising_edge(clk) then
+            actual_st <= next_st;
+        end if;
+    end process;
+    
+    process(actual_st)
+    begin
+        case actual_st is
+        when INIT => 
+            gate_marmux <= '0';
+            marmux_ctrl <= '0';
+            gatePC <= '0';
+            ld_pc <= '0';
+            pcmux_ctrl <= (others => '0');
+            dr <= (others => '0');
+            ld_reg <= '0';
+            sr1 <= (others => '0');
+            sr2 <= (others => '0');
+            addr1mux <= '0';
+            addr2mux <= (others => '0');
+            ld_ir <= '1';
+            aluk <= (others => '0');
+            gate_mdr <= '0';
+            ld_mdr <= '0';
+            ld_mar <= '0';
+            mem_en <= '0';
+            r_w <= '1';
+            gate_alu <= '0';
+            ld_cc <= '0';
+            
+            next_st <= FETCH1;
+            
+        when FETCH1 => -- get address from pc and put it into MAR
+            gatePC <= '1';
+            ld_mar <= '1';
+            ld_pc <= '0';
+            
+            next_st <= FETCH2;
+        
+        when FETCH2 => -- get instruction from memory[addr] and put it into MDR
+            ld_mar <= '0';
+            ld_mdr <= '1';
+            gate_mdr <= '1';
+            mem_en <= '1';
+            r_w <= '1';
+            
+            next_st <= FETCH3;
+        
+        when FETCH3 => -- get instruction from the bus into IR
+            ld_mdr <= '0';
+            gate_mdr <= '0';
+            mem_en <= '0';
+            r_w <= '0';
+            ld_ir <= '1';
+            
+            next_st <= DECODE;
+            
+        when DECODE =>
+            gatePC <= '0';
+            ld_ir <= '0';
+            case ir_data(15 downto 12) is
+            when "0001" => -- ADD 
+                dr <= ir_data(11 downto 9);
+                sr1 <= ir_data(8 downto 6);
+                sr2 <= ir_data(2 downto 0);
+                
+                pcmux_ctrl <= "00";
+                addr1mux <= '0';
+                addr2mux <= "00";
+                marmux_ctrl <= '0';
+                gate_marmux <= '0';
+                
+                next_st <= EXECUTE;
+               
+            when "0101" => -- AND
+                dr <= ir_data(11 downto 9);
+                sr1 <= ir_data(8 downto 6);
+                sr2 <= ir_data(2 downto 0);
+                
+                pcmux_ctrl <= "00";
+                addr1mux <= '0';
+                addr2mux <= "00";
+                marmux_ctrl <= '0';
+                gate_marmux <= '0';
+                
+                next_st <= EXECUTE;
+                
+            when "0000" => -- BR 
+                addr1mux <= '0';
+                marmux_ctrl <= '0';
+                gate_marmux <= '0';
+                if (nzp(2) = '1' and ir_data(11)= '1') or (nzp(1)= '1' and ir_data(10)= '1') or (nzp(0)= '1' and ir_data(9)= '1') then 
+                    pcmux_ctrl <= "01";
+                    addr2mux <= "10";
+                else 
+                    pcmux_ctrl <= "00";
+                    addr2mux <= "00";
+                end if;
+                ld_pc <= '1';
+                
+                next_st <= FETCH1;
+                
+            when "1100" => -- JMP & RET
+                sr1 <= ir_data(8 downto 6);
+                next_st <= EXECUTE;
+                
+            when "0100" => -- JSR & JSRR
+                ld_reg <= '1';
+                dr <= "111";
+            
+            when "0010" => -- LD
+            when "1010" => -- LDI
+            when "0110" => -- LDR
+            when "1110" => -- LEA
+            when "1001" => -- NOT
+            when "1100" => -- RET
+            when "1000" => -- RTI
+            when "0011" => -- ST
+            when "1011" => -- STI
+            when "0111" => -- STR
+            when "1111" => -- TRAP
+            when "1101" => -- reserved
+            end case;
+        
+        when EXECUTE =>
+            case ir_data(15 downto 12) is
+            when "0001" => -- ADD
+                aluk <= "00";
+                gate_alu <= '1';
+                ld_cc <= '1';
+                ld_reg <= '1';
+                ld_pc <= '1';
+                next_st <= FETCH1;
+                
+            when "0101" => -- AND
+                aluk <= "01";
+                gate_alu <= '1';
+                ld_cc <= '1';
+                ld_reg <= '1';
+                ld_pc <= '1';
+                next_st <= FETCH1;
+            
+            when "1100" => -- JMP & RET
+                addr1mux <= '1';
+                addr2mux <= "00";
+                pcmux_ctrl <= "01";
+                ld_pc <= '1';
+                next_st <= FETCH1;
+                
+            when "0100" => -- JSR & JSRR--go to subroutine
+                if ir_data(11) = '0' then --use BaseR
+                    sr1 <= ir_data(8 downto 6);
+                    addr1mux <= '1';
+                    addr2mux <= "00";
+                    pcmux_ctrl <= "01";
+                elsif ir_data(11) = '1' then -- use PCoffset11
+                    addr1mux <= '0';
+                    addr2mux <= "11";
+                    pcmux_ctrl <= "01";
+                end if;
+                ld_pc <= '1';
+                next_st <= FETCH1;
+                
+            when "0010" => -- LD
+            when "1010" => -- LDI
+            when "0110" => -- LDR
+            when "1110" => -- LEA
+            when "1001" => -- NOT
+            when "1100" => -- RET
+            when "1000" => -- RTI
+            when "0011" => -- ST
+            when "1011" => -- STI
+            when "0111" => -- STR
+            when "1111" => -- TRAP
+            when "1101" => -- reserved
+            end case; 
+            
+        
+        end case;
+    end process;
+        
 end Behavioral;

@@ -43,7 +43,7 @@ architecture Behavioral of lc3_top is
     -- pc_logic
     signal add_data : std_logic_vector(15 downto 0);
     signal pcmux_control : std_logic_vector(1 downto 0);
-    signal pc_control : std_logic;
+    signal ld_pc : std_logic;
     signal gatePC : std_logic;
     -- reg_file
     signal dr : std_logic_vector(2 downto 0); --destination register address
@@ -95,7 +95,7 @@ begin
         add_data => add_data,
         bus_data => bus_data,
         pcmux_control => pcmux_control,
-        pc_control => pc_control,
+        ld_pc => ld_pc,
         gatePC => gatePC,
         pc_data => pc,
         gate_out => bus_data

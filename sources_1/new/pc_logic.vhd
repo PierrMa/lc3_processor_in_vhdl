@@ -25,10 +25,11 @@ use IEEE.NUMERIC_STD.ALL;
 
 entity pc_logic is
 Port ( 
+    clk,rst : in std_logic;
     add_data : in std_logic_vector(15 downto 0);
     bus_data : in std_logic_vector(15 downto 0);
     pcmux_control : in std_logic_vector(1 downto 0);
-    pc_control : in std_logic;
+    ld_pc : in std_logic;
     gatePC : in std_logic;
     pc_data : out std_logic_vector(15 downto 0); -- pc register output before tristate buffer
     gate_out : out std_logic_vector(15 downto 0) -- pc register output after tristate buffer
@@ -43,8 +44,14 @@ begin
     pcmux_data <= std_logic_vector(unsigned(pc_data_s) + 1) when pcmux_control = "00"
                   else add_data when pcmux_control = "01"
                   else bus_data when pcmux_control = "10";
-                  
-    pc_data_s <= pcmux_data when pc_control = '1';
+    
+    process(clk,rst)
+    begin
+        if rst = '1' then pc_data_s <= x"3000";
+        elsif rising_edge(clk) then
+            if ld_pc = '1' then pc_data_s <= pcmux_data; end if;
+        end if;
+    end process;
     
     pc_data <= pc_data_s;
     gate_out <= pc_data_s when gatePC = '1' else (others => 'Z');
