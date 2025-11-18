@@ -92,6 +92,8 @@ begin
     
     pc_logic_inst : entity work.pc_logic
     port map(
+        clk => clk,
+        rst => rst,
         add_data => add_data,
         bus_data => bus_data,
         pcmux_control => pcmux_control,

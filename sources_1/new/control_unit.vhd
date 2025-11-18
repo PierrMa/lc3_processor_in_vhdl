@@ -55,8 +55,9 @@ Port (
 end control_unit;
 
 architecture Behavioral of control_unit is
-    type fsm_t is (INIT,FETCH1,FETCH2,FETCH3,DECODE,EXECUTE,UPDATE_REG);
+    type fsm_t is (INIT,FETCH1,FETCH2,FETCH3,DECODE,EXECUTE,MEMORY_ACCESS,WRITE_BACK);
     signal actual_st, next_st: fsm_t;
+    signal round2 : std_logic := '0';
     
 begin
 
@@ -172,13 +173,51 @@ begin
             when "0100" => -- JSR & JSRR
                 ld_reg <= '1';
                 dr <= "111";
+                next_st <= EXECUTE;
             
             when "0010" => -- LD
+                addr2mux <= "10";
+                addr1mux <= '0';
+                marmux_ctrl <= '0';
+                gate_marmux <= '1';
+                ld_mar <= '1';
+                next_st <= EXECUTE;
+                
             when "1010" => -- LDI
+                addr2mux <= "10";
+                addr1mux <= '0';
+                marmux_ctrl <= '0';
+                gate_marmux <= '1';
+                ld_mar <= '1';
+                round2 <= '0';
+                next_st <= EXECUTE;
+                
             when "0110" => -- LDR
+                sr1 <= ir_data(8 downto 6);
+                addr2mux <= "01";
+                addr1mux <= '1';
+                marmux_ctrl <= '0';
+                gate_marmux <= '1';
+                ld_mar <= '1';
+                next_st <= EXECUTE;
+                
             when "1110" => -- LEA
+                addr2mux <= "10";
+                addr1mux <= '0';
+                marmux_ctrl <= '0';
+                gate_marmux <= '1';
+                dr <= ir_data(11 downto 9);
+                ld_reg <= '1';
+                pcmux_ctrl <= "00";
+                ld_pc <= '1';
+                next_st <= FETCH1;
+                
             when "1001" => -- NOT
-            when "1100" => -- RET
+                sr1 <= ir_data(8 downto 6);
+                aluk <= "10";
+                gate_alu <= '1';
+                next_st <= EXECUTE;
+                
             when "1000" => -- RTI
             when "0011" => -- ST
             when "1011" => -- STI
@@ -227,11 +266,41 @@ begin
                 next_st <= FETCH1;
                 
             when "0010" => -- LD
+                gate_marmux <= '0';
+                ld_mar <= '0';
+                mem_en <= '1';
+                r_w <= '1';
+                ld_mdr <= '1';
+                gate_mdr <= '1';
+                next_st <= WRITE_BACK;
+                
             when "1010" => -- LDI
+                mem_en <= '1';
+                r_w <= '1';
+                ld_mdr <= '1';
+                gate_mdr <= '1';
+                ld_ir <= '1';
+                if round2 = '0' then 
+                    round2 <= '1';
+                    next_st <= DECODE;
+                else
+                    round2 <= '0';
+                    next_st <= WRITE_BACK;
+                end if;
+                
             when "0110" => -- LDR
-            when "1110" => -- LEA
+                mem_en <= '1';
+                r_w <= '1';
+                ld_mdr <= '1';
+                gate_mdr <= '1';
+                next_st <= WRITE_BACK;
+                
             when "1001" => -- NOT
-            when "1100" => -- RET
+                dr <= ir_data(11 downto 9);
+                ld_reg <= '1';
+                ld_cc <= '1';
+                next_st <= FETCH1;
+            
             when "1000" => -- RTI
             when "0011" => -- ST
             when "1011" => -- STI
@@ -240,7 +309,19 @@ begin
             when "1101" => -- reserved
             end case; 
             
-        
+        when WRITE_BACK =>
+            mem_en <= '0';
+            ld_mdr <= '0';
+            gate_mdr <= '0';
+            --write result in DR
+            ld_reg <= '1';
+            dr <= ir_data(11 downto 9);
+            --prepare next cycle
+            ld_cc <= '1';
+            pcmux_ctrl <= "00";
+            ld_pc <= '1';
+            next_st <= FETCH1;
+            
         end case;
     end process;
         
