@@ -171,6 +171,8 @@ begin
                 next_st <= EXECUTE;
                 
             when "0100" => -- JSR & JSRR
+                --save pc
+                gatePC <= '1';
                 ld_reg <= '1';
                 dr <= "111";
                 next_st <= EXECUTE;
@@ -218,7 +220,6 @@ begin
                 gate_alu <= '1';
                 next_st <= EXECUTE;
                 
-            when "1000" => -- RTI
             when "0011" => -- ST
             when "1011" => -- STI
             when "0111" => -- STR
@@ -301,7 +302,6 @@ begin
                 ld_cc <= '1';
                 next_st <= FETCH1;
             
-            when "1000" => -- RTI
             when "0011" => -- ST
             when "1011" => -- STI
             when "0111" => -- STR
