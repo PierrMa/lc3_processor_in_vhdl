@@ -55,7 +55,7 @@ Port (
 end control_unit;
 
 architecture Behavioral of control_unit is
-    type fsm_t is (INIT,FETCH1,FETCH2,FETCH3,DECODE,EXECUTE,MEMORY_ACCESS,WRITE_BACK);
+    type fsm_t is (INIT,FETCH1,FETCH2,FETCH3,DECODE,EXECUTE,STORE,WRITE_BACK);
     signal actual_st, next_st: fsm_t;
     signal round2 : std_logic := '0';
     
@@ -221,8 +221,44 @@ begin
                 next_st <= EXECUTE;
                 
             when "0011" => -- ST
+                --get memory location (PC+SEXT(PCoffset9)) into MAR
+                addr1mux <= '0';
+                addr2mux <= "10";
+                marmux_ctrl <= '0';
+                gate_marmux <= '1';
+                ld_mar <= '1';
+                --prepare register data
+                sr1 <= ir_data(11 downto 9);
+                aluk <= "11";
+                next_st <= EXECUTE;
+                
             when "1011" => -- STI
+                --get memory location into MAR
+                addr1mux <= '0';
+                addr2mux <= "10";
+                marmux_ctrl <= '0';
+                gate_marmux <= '1';
+                ld_mar <= '1';
+                round2 <= '0';
+                
+                if round2 = '1' then 
+                    --get register content into MDR
+                    sr1 <= ir_data(11 downto 9);
+                    aluk <= "11";
+                end if;
+                
+                next_st <= EXECUTE;
+                
             when "0111" => -- STR
+                --get memory location (BaseR+SEXT(PCoffset6)) into MAR
+                addr1mux <= '1';
+                addr2mux <= "01";
+                sr1 <= ir_data(8 downto 6);
+                marmux_ctrl <= '0';
+                gate_marmux <= '1';
+                ld_mar <= '1';
+                next_st <= EXECUTE;
+                
             when "1111" => -- TRAP
             when "1101" => -- reserved
             end case;
@@ -303,8 +339,39 @@ begin
                 next_st <= FETCH1;
             
             when "0011" => -- ST
-            when "1011" => -- STI
+                gate_marmux <= '0';
+                --get SR data into MDR
+                gate_ALU <= '1';
+                ld_mdr <= '1';
+                next_st <= STORE;
+                
+            when "1011" => -- STI 
+                gate_marmux <= '0';
+                ld_mar <= '0';
+                if round2 = '0' then
+                    mem_en <= '1';
+                    r_w <= '1';
+                    ld_mdr <= '1';
+                    gate_mdr <= '1';
+                    ld_ir <= '1';
+                    round2 <= '1';
+                    next_st <= DECODE;
+                else
+                    --get SR data into MDR
+                    gate_ALU <= '1';
+                    ld_mdr <= '1';
+                    next_st <= STORE;
+                end if;
+                
             when "0111" => -- STR
+                ld_mar <= '0';
+                gate_marmux <= '0';
+                sr1 <= ir_data(11 downto 9);
+                aluk <= "11";
+                gate_alu <= '1';
+                ld_mdr <= '1';
+                next_st <= STORE;
+                
             when "1111" => -- TRAP
             when "1101" => -- reserved
             end case; 
@@ -321,7 +388,17 @@ begin
             pcmux_ctrl <= "00";
             ld_pc <= '1';
             next_st <= FETCH1;
-            
+        
+        when STORE => 
+            gate_alu <= '0';
+            ld_mdr <= '0';
+            --write memory
+            mem_en <= '1';
+            r_w <= '0';
+            --prepare next cycle
+            pcmux_ctrl <= "00";
+            ld_pc <= '1';
+            next_st <= FETCH1;    
         end case;
     end process;
         
