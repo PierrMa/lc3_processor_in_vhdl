@@ -55,7 +55,7 @@ Port (
 end control_unit;
 
 architecture Behavioral of control_unit is
-    type fsm_t is (INIT,FETCH1,FETCH2,FETCH3,DECODE,EXECUTE,STORE,WRITE_BACK);
+    type fsm_t is (INIT,FETCH1,FETCH2,FETCH3,DECODE,EXECUTE,STORE,WRITE_BACK,REPLACE_PC);
     signal actual_st, next_st: fsm_t;
     signal round2 : std_logic := '0';
     
@@ -93,6 +93,7 @@ begin
             r_w <= '1';
             gate_alu <= '0';
             ld_cc <= '0';
+            round2 <= '0';
             
             next_st <= FETCH1;
             
@@ -104,25 +105,29 @@ begin
             next_st <= FETCH2;
         
         when FETCH2 => -- get instruction from memory[addr] and put it into MDR
+            gatePC <= '0';
             ld_mar <= '0';
             ld_mdr <= '1';
-            gate_mdr <= '1';
             mem_en <= '1';
             r_w <= '1';
             
-            next_st <= FETCH3;
+            if ir_data(15 downto 12) = "1111" and round2 = '1' then
+                round2 <= '0';
+                next_st <= REPLACE_PC;
+            else
+                next_st <= FETCH3;
+            end if;
         
         when FETCH3 => -- get instruction from the bus into IR
             ld_mdr <= '0';
-            gate_mdr <= '0';
+            gate_mdr <= '1';
             mem_en <= '0';
-            r_w <= '0';
             ld_ir <= '1';
             
             next_st <= DECODE;
             
         when DECODE =>
-            gatePC <= '0';
+            gate_mdr <= '0';
             ld_ir <= '0';
             case ir_data(15 downto 12) is
             when "0001" => -- ADD 
@@ -131,10 +136,6 @@ begin
                 sr2 <= ir_data(2 downto 0);
                 
                 pcmux_ctrl <= "00";
-                addr1mux <= '0';
-                addr2mux <= "00";
-                marmux_ctrl <= '0';
-                gate_marmux <= '0';
                 
                 next_st <= EXECUTE;
                
@@ -144,17 +145,11 @@ begin
                 sr2 <= ir_data(2 downto 0);
                 
                 pcmux_ctrl <= "00";
-                addr1mux <= '0';
-                addr2mux <= "00";
-                marmux_ctrl <= '0';
-                gate_marmux <= '0';
                 
                 next_st <= EXECUTE;
                 
             when "0000" => -- BR 
                 addr1mux <= '0';
-                marmux_ctrl <= '0';
-                gate_marmux <= '0';
                 if (nzp(2) = '1' and ir_data(11)= '1') or (nzp(1)= '1' and ir_data(10)= '1') or (nzp(0)= '1' and ir_data(9)= '1') then 
                     pcmux_ctrl <= "01";
                     addr2mux <= "10";
@@ -168,7 +163,11 @@ begin
                 
             when "1100" => -- JMP & RET
                 sr1 <= ir_data(8 downto 6);
-                next_st <= EXECUTE;
+                addr1mux <= '1';
+                addr2mux <= "00";
+                pcmux_ctrl <= "01";
+                ld_pc <= '1';
+                next_st <= FETCH1;
                 
             when "0100" => -- JSR & JSRR
                 --save pc
@@ -186,12 +185,13 @@ begin
                 next_st <= EXECUTE;
                 
             when "1010" => -- LDI
-                addr2mux <= "10";
-                addr1mux <= '0';
-                marmux_ctrl <= '0';
-                gate_marmux <= '1';
+                if round2 = '0' then
+                    addr2mux <= "10";
+                    addr1mux <= '0';
+                    marmux_ctrl <= '0';
+                    gate_marmux <= '1';
+                end if;
                 ld_mar <= '1';
-                round2 <= '0';
                 next_st <= EXECUTE;
                 
             when "0110" => -- LDR
@@ -233,15 +233,16 @@ begin
                 next_st <= EXECUTE;
                 
             when "1011" => -- STI
-                --get memory location into MAR
-                addr1mux <= '0';
-                addr2mux <= "10";
-                marmux_ctrl <= '0';
-                gate_marmux <= '1';
+                if round2 = '0' then
+                    --get memory location into MAR
+                    addr1mux <= '0';
+                    addr2mux <= "10";
+                    marmux_ctrl <= '0';
+                    gate_marmux <= '1';
+                end if;
                 ld_mar <= '1';
-                round2 <= '0';
                 
-                if round2 = '1' then 
+                if round2 = '1' then
                     --get register content into MDR
                     sr1 <= ir_data(11 downto 9);
                     aluk <= "11";
@@ -260,7 +261,14 @@ begin
                 next_st <= EXECUTE;
                 
             when "1111" => -- TRAP
+                --save PC into R7
+                gatePC <= '1';
+                ld_reg <= '1';
+                dr <= "111";
+                next_st <= EXECUTE;
+                
             when "1101" => -- reserved
+                next_st <= FETCH1; --do nothing
             end case;
         
         when EXECUTE =>
@@ -278,13 +286,6 @@ begin
                 gate_alu <= '1';
                 ld_cc <= '1';
                 ld_reg <= '1';
-                ld_pc <= '1';
-                next_st <= FETCH1;
-            
-            when "1100" => -- JMP & RET
-                addr1mux <= '1';
-                addr2mux <= "00";
-                pcmux_ctrl <= "01";
                 ld_pc <= '1';
                 next_st <= FETCH1;
                 
@@ -316,7 +317,6 @@ begin
                 r_w <= '1';
                 ld_mdr <= '1';
                 gate_mdr <= '1';
-                ld_ir <= '1';
                 if round2 = '0' then 
                     round2 <= '1';
                     next_st <= DECODE;
@@ -353,7 +353,6 @@ begin
                     r_w <= '1';
                     ld_mdr <= '1';
                     gate_mdr <= '1';
-                    ld_ir <= '1';
                     round2 <= '1';
                     next_st <= DECODE;
                 else
@@ -373,7 +372,15 @@ begin
                 next_st <= STORE;
                 
             when "1111" => -- TRAP
-            when "1101" => -- reserved
+                gatePC <= '0';
+                ld_reg <= '0';
+                --get trapvector into MAR
+                marmux_ctrl <= '1';
+                gate_marmux <= '1';
+                ld_mar <= '1';
+                round2 <= '1';
+                next_st <= FETCH2;
+            
             end case; 
             
         when WRITE_BACK =>
@@ -398,7 +405,16 @@ begin
             --prepare next cycle
             pcmux_ctrl <= "00";
             ld_pc <= '1';
-            next_st <= FETCH1;    
+            next_st <= FETCH1;  
+             
+        when REPLACE_PC =>
+            ld_mdr <= '0';
+            mem_en <= '0';
+            gate_mdr <= '1';
+            pcmux_ctrl <= "10";
+            ld_pc <= '1';
+            next_st <= FETCH1;
+            
         end case;
     end process;
         
