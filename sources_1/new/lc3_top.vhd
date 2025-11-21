@@ -38,7 +38,7 @@ architecture Behavioral of lc3_top is
     signal addr2mux_ctrl : std_logic_vector(1 downto 0);
     -- alu
     signal sr2mux_data : std_logic_vector(15 downto 0);
-    signal control : std_logic_vector(1 downto 0);
+    signal aluk : std_logic_vector(1 downto 0);
     signal gateALU : std_logic;
     -- pc_logic
     signal add_data : std_logic_vector(15 downto 0);
@@ -51,7 +51,7 @@ architecture Behavioral of lc3_top is
     signal sr1,sr2 : std_logic_vector(2 downto 0); --source registers addresses
     -- nzp_logic
     signal ld_cc : std_logic;
-    signal nzp_out : std_logic_vector(2 downto 0);
+    signal nzp : std_logic_vector(2 downto 0);
     -- memory_logic
     signal ld_mar : std_logic;
     signal ld_mdr : std_logic;
@@ -63,9 +63,11 @@ architecture Behavioral of lc3_top is
     signal marmux_ctrl : std_logic;
     -- ir
     signal ld_ir : std_logic;
-    signal ir_out : std_logic_vector(15 downto 0);
+    signal ir_data : std_logic_vector(15 downto 0);
     -- bus
     signal bus_data : std_logic_vector(15 downto 0);
+    --control unit
+     
 begin
 
     compute_addr_logic_inst : entity work.compute_addr_logic
@@ -85,7 +87,7 @@ begin
     port map(
         register_data => sr1_out,
         sr2mux_data => sr2mux_data,
-        control => control,
+        control => aluk,
         gateALU => gateALU,
         alu_output => bus_data
     );
@@ -122,7 +124,7 @@ begin
         rst => rst,
         bus_data => bus_data,
         ld_cc => ld_cc,
-        nzp_out => nzp_out
+        nzp_out => nzp
     );
     
     memory_logic_inst : entity work.memory_logic
@@ -149,6 +151,35 @@ begin
         rst => rst,
         bus_data => bus_data,
         ld_ir => ld_ir,
-        ir_out => ir_out
+        ir_out => ir_data
     );
+    
+    control_unit_inst : entity work.control_unit
+    port map(
+        clk => clk,
+        rst => rst,
+        ir_data => ir_data,
+        nzp => nzp,
+        gate_marmux => gate_marmux,
+        marmux_ctrl => marmux_ctrl,
+        gatePC => gatePC,
+        ld_pc => ld_pc,
+        pcmux_ctrl => pcmux_control,
+        dr => dr,
+        ld_reg => ld_reg,
+        sr1 => sr1,
+        sr2 => sr2,
+        addr1mux => addr1mux_ctrl,
+        addr2mux => addr2mux_ctrl,
+        ld_ir => ld_ir,
+        aluk => aluk,
+        gate_mdr => gate_mdr,
+        ld_mdr => ld_mdr,
+        ld_mar => ld_mar,
+        mem_en => mem_en,
+        r_w => r_w,
+        gate_alu => gateALU,
+        ld_cc => ld_cc
+    );
+    
 end Behavioral;
